@@ -2,32 +2,201 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Debug Test</title>
+  <title>Checklist Filter</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 12px;
+      margin: 0;
+    }
+
+    select, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+    }
+
+    label {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      align-items: center;
+    }
+
+    ul {
+      margin-top: 10px;
+      max-height: 250px;
+      overflow-y: auto;
+      padding-left: 18px;
+      font-size: 13px;
+    }
+  </style>
 </head>
+
 <body>
 
-<h1>Popup Loaded ✅</h1>
-<button id="btn">Run Test</button>
-<ul id="results"></ul>
+<h3>Checklist Filter</h3>
+
+<select id="memberSelect">
+  <option>Loading members…</option>
+</select>
+
+<label>
+  <input type="checkbox" id="openOnly" checked>
+  Show open items only
+</label>
+
+<button id="runFilter">Apply Filter</button>
+<button id="clearFilter">Clear Filter</button>
+
+<ul id="log"></ul>
 
 <script>
 const t = window.TrelloPowerUp.iframe();
+const logEl = document.getElementById('log');
 
-document.getElementById('btn').onclick = async () => {
-  const results = document.getElementById('results');
-  results.innerHTML = '<li>Running...</li>';
+function log(msg) {
+  console.log('[ChecklistFilter]', msg);
+  const li = document.createElement('li');
+  li.textContent = msg;
+  logEl.appendChild(li);
+  logEl.scrollTop = logEl.scrollHeight;
+}
 
-  try {
-    const cards = await t.cards('id', 'name');
-    console.log('CARDS:', cards);
+async function loadMembers() {
+  log('Loading members…');
 
-    results.innerHTML += '<li>Success. Check console.</li>';
-  } catch (e) {
-    console.error(e);
-    results.innerHTML += '<li>Error: ' + e.message + '</li>';
+  const board = await t.board('members');
+
+  const select = document.getElementById('memberSelect');
+  select.innerHTML = '';
+
+  for (const m of board.members) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.fullName;
+    select.appendChild(opt);
   }
-};
+
+  log(`Loaded ${board.members.length} members`);
+}
+
+async function getFullChecklist(id) {
+  try {
+    return await t.get(`/checklists/${id}`);
+  } catch (e) {
+    log(`Checklist fetch failed: ${id}`);
+    return null;
+  }
+}
+
+async function filterChecklistItems() {
+  logEl.innerHTML = '';
+
+  const memberId = document.getElementById('memberSelect').value;
+  const openOnly = document.getElementById('openOnly').checked;
+
+  log('Scanning cards…');
+
+  const board = await t.board('id', 'labels');
+  const cards = await t.cards('id', 'name', 'checklists', 'idLabels');
+
+  let filterLabel = board.labels.find(
+    l => l.name === 'Checklist Filter'
+  );
+
+  if (!filterLabel) {
+    log('Creating filter label…');
+
+    filterLabel = await t.post('/labels', {
+      name: 'Checklist Filter',
+      color: 'yellow',
+      idBoard: board.id
+    });
+  }
+
+  const matching = new Set();
+
+  for (const card of cards) {
+    if (!Array.isArray(card.checklists)) continue;
+
+    for (const cl of card.checklists) {
+      const full = await getFullChecklist(cl.id);
+      if (!full || !Array.isArray(full.checkItems)) continue;
+
+      for (const item of full.checkItems) {
+        const assigned = item.idMember === memberId;
+        const status = !openOnly || item.state === 'incomplete';
+
+        if (assigned && status) {
+          matching.add(card.id);
+          log(`Match → ${card.name}`);
+          break;
+        }
+      }
+    }
+  }
+
+  log(`Applying filter to ${matching.size} cards…`);
+
+  for (const card of cards) {
+    const hasLabel = card.idLabels.includes(filterLabel.id);
+    const shouldHave = matching.has(card.id);
+
+    if (shouldHave && !hasLabel) {
+      await t.post(`/cards/${card.id}/idLabels`, {
+        value: filterLabel.id
+      });
+    }
+
+    if (!shouldHave && hasLabel) {
+      await t.delete(
+        `/cards/${card.id}/idLabels/${filterLabel.id}`
+      );
+    }
+  }
+
+  log('Done. Press F and select "Checklist Filter".');
+}
+
+async function clearFilter() {
+  logEl.innerHTML = '';
+  log('Clearing filter…');
+
+  const board = await t.board('labels');
+  const cards = await t.cards('id', 'idLabels');
+
+  const label = board.labels.find(
+    l => l.name === 'Checklist Filter'
+  );
+
+  if (!label) {
+    log('No filter label found.');
+    return;
+  }
+
+  for (const card of cards) {
+    if (card.idLabels.includes(label.id)) {
+      await t.delete(
+        `/cards/${card.id}/idLabels/${label.id}`
+      );
+    }
+  }
+
+  log('Filter cleared.');
+}
+
+document
+  .getElementById('runFilter')
+  .onclick = filterChecklistItems;
+
+document
+  .getElementById('clearFilter')
+  .onclick = clearFilter;
+
+loadMembers();
 </script>
 
 </body>
