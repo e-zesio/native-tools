@@ -1,54 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Checklist Filter</title>
+  <meta charset="utf-8">
+  <title>Debug Test</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
-
 <body>
-  <h3>Checklist Filter Debug</h3>
 
-  <button id="runFilter">Run Debug</button>
+<h1>Popup Loaded ✅</h1>
+<button id="btn">Run Test</button>
+<ul id="results"></ul>
 
-  <ul id="results"></ul>
+<script>
+const t = window.TrelloPowerUp.iframe();
 
-  <script>
-    const t = window.TrelloPowerUp.iframe();
+document.getElementById('btn').onclick = async () => {
+  const results = document.getElementById('results');
+  results.innerHTML = '<li>Running...</li>';
 
-    async function filterChecklistItems() {
-      const resultsEl = document.getElementById('results');
-      resultsEl.innerHTML = '<li>Running debug...</li>';
+  try {
+    const cards = await t.cards('id', 'name');
+    console.log('CARDS:', cards);
 
-      try {
-        const cards = await t.cards('id', 'name', 'checklists');
+    results.innerHTML += '<li>Success. Check console.</li>';
+  } catch (e) {
+    console.error(e);
+    results.innerHTML += '<li>Error: ' + e.message + '</li>';
+  }
+};
+</script>
 
-        console.log('CARDS:', cards);
-
-        for (const card of cards) {
-          if (!Array.isArray(card.checklists)) {
-            console.log('No checklists:', card.name);
-            continue;
-          }
-
-          for (const checklist of card.checklists) {
-            console.log('Checklist:', checklist);
-          }
-        }
-
-        resultsEl.innerHTML +=
-          '<li>Debug complete. Check console.</li>';
-
-      } catch (err) {
-        console.error('DEBUG ERROR:', err);
-        resultsEl.innerHTML +=
-          `<li>${err.message}</li>`;
-      }
-    }
-
-    document
-      .getElementById('runFilter')
-      .addEventListener('click', filterChecklistItems);
-  </script>
 </body>
 </html>
