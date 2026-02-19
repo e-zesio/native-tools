@@ -89,66 +89,88 @@
       }
     }
 
-    async function filterChecklistItems() {
-      const memberId = document.getElementById('memberSelect').value;
-      const openOnly = document.getElementById('openOnly').checked;
-      const resultsEl = document.getElementById('results');
+   async function filterChecklistItems() {
+  const memberId = document.getElementById('memberSelect').value;
+  const openOnly = document.getElementById('openOnly').checked;
+  const resultsEl = document.getElementById('results');
 
-      if (!memberId) {
-        resultsEl.innerHTML = '<li>Select a member first.</li>';
-        return;
+  if (!memberId) {
+    resultsEl.innerHTML = '<li>Select a member first.</li>';
+    return;
+  }
+
+  resultsEl.innerHTML = '<li>Filtering cards...</li>';
+
+  try {
+    const board = await t.board('id', 'labels');
+    const cards = await t.cards('id', 'name', 'checklists', 'idLabels');
+
+    // Find or create filter label
+    let filterLabel = board.labels.find(
+      l => l.name === 'Checklist Filter'
+    );
+
+    if (!filterLabel) {
+      filterLabel = await t.post(
+        `/labels`,
+        {
+          name: 'Checklist Filter',
+          color: 'yellow',
+          idBoard: board.id
+        }
+      );
+    }
+
+    const matchingCardIds = new Set();
+
+    cards.forEach(card => {
+      let match = false;
+
+      (card.checklists || []).forEach(checklist => {
+        const items = checklist.checkItems || [];
+
+        items.forEach(item => {
+          const assignedMatch = item.idMember === memberId;
+          const statusMatch =
+            !openOnly || item.state === 'incomplete';
+
+          if (assignedMatch && statusMatch) {
+            match = true;
+          }
+        });
+      });
+
+      if (match) matchingCardIds.add(card.id);
+    });
+
+    // Apply/remove label
+    for (const card of cards) {
+      const hasLabel = card.idLabels.includes(filterLabel.id);
+      const shouldHave = matchingCardIds.has(card.id);
+
+      if (shouldHave && !hasLabel) {
+        await t.post(`/cards/${card.id}/idLabels`, {
+          value: filterLabel.id
+        });
       }
 
-      resultsEl.innerHTML = '<li>Searching...</li>';
-
-      try {
-        const cards = await t.cards('id', 'name', 'url', 'checklists');
-        const matches = [];
-
-        cards.forEach(card => {
-          (card.checklists || []).forEach(checklist => {
-            checklist.checkItems.forEach(item => {
-              const assignedMatch = item.idMember === memberId;
-              const statusMatch =
-                !openOnly || item.state === 'incomplete';
-
-              if (assignedMatch && statusMatch) {
-                matches.push({
-                  cardName: card.name,
-                  cardUrl: card.url,
-                  itemName: item.name
-                });
-              }
-            });
-          });
-        });
-
-        resultsEl.innerHTML = '';
-
-        if (matches.length === 0) {
-          resultsEl.innerHTML = '<li>No items found.</li>';
-          return;
-        }
-
-        matches.forEach(match => {
-          const li = document.createElement('li');
-
-          const link = document.createElement('a');
-          link.href = match.cardUrl;
-          link.target = '_blank';
-          link.textContent =
-            `${match.itemName} (Card: ${match.cardName})`;
-
-          li.appendChild(link);
-          resultsEl.appendChild(li);
-        });
-
-      } catch (err) {
-        console.error('Error filtering items:', err);
-        resultsEl.innerHTML =
-          '<li>Error loading checklist items.</li>';
+      if (!shouldHave && hasLabel) {
+        await t.delete(
+          `/cards/${card.id}/idLabels/${filterLabel.id}`
+        );
       }
     }
+
+    resultsEl.innerHTML =
+      '<li>Done! Press F and filter by label "Checklist Filter".</li>';
+
+  } catch (err) {
+    console.error('Error filtering items:', err);
+    resultsEl.innerHTML =
+      '<li>Error filtering cards.</li>';
+  }
+}
+
 
     document
       .getElementById('runFilter')
