@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Checklist Assignee Filter Power-Up</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 12px;
+    }
+    select, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+      gap: 6px;
+    }
+    ul {
+      margin-top: 12px;
+      padding-left: 18px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h3>Filter Checklist Items by Assignee</h3>
+
+  <select id="memberSelect">
+    <option value="">Loading members...</option>
+  </select>
+
+  <label>
+    <input type="checkbox" id="openOnly" checked />
+    Show open items only
+  </label>
+
+  <button id="runFilter">Show Items</button>
+
+  <ul id="results"></ul>
+
+  <script>
+    const t = window.TrelloPowerUp.iframe();
+
+    async function loadMembers() {
+      const members = await t.board('members');
+      const select = document.getElementById('memberSelect');
+      select.innerHTML = '';
+
+      members.members.forEach(member => {
+        const option = document.createElement('option');
+        option.value = member.id;
+        option.textContent = member.fullName;
+        select.appendChild(option);
+      });
+    }
+
+    async function filterChecklistItems() {
+      const memberId = document.getElementById('memberSelect').value;
+      const openOnly = document.getElementById('openOnly').checked;
+      const resultsEl = document.getElementById('results');
+
+      resultsEl.innerHTML = '<li>Searching...</li>';
+
+      const cards = await t.cards('id', 'name', 'url', 'checklists');
+      const matches = [];
+
+      cards.forEach(card => {
+        (card.checklists || []).forEach(cl => {
+          cl.checkItems.forEach(item => {
+            const assignedMatch = item.idMember === memberId;
+            const statusMatch = !openOnly || item.state === 'incomplete';
+
+            if (assignedMatch && statusMatch) {
+              matches.push({
+                cardName: card.name,
+                cardUrl: card.url,
+                itemName: item.name
+              });
+            }
+          });
+        });
+      });
+
+      resultsEl.innerHTML = '';
+
+      if (matches.length === 0) {
+        resultsEl.innerHTML = '<li>No items found.</li>';
+        return;
+      }
+
+      matches.forEach(m => {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = m.cardUrl;
+        link.target = '_blank';
+        link.textContent = `${m.itemName} (Card: ${m.cardName})`;
+        li.appendChild(link);
+        resultsEl.appendChild(li);
+      });
+    }
+
+    document.getElementById('runFilter').addEventListener('click', filterChecklistItems);
+
+    loadMembers();
+  </script>
+</body>
+</html>
