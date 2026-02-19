@@ -1,27 +1,54 @@
-async function filterChecklistItems() {
-  const resultsEl = document.getElementById('results');
-  resultsEl.innerHTML = '<li>Running debug...</li>';
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Checklist Filter</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
 
-  try {
-    const cards = await t.cards('id', 'name', 'checklists');
+<body>
+  <h3>Checklist Filter Debug</h3>
 
-    console.log('CARDS:', cards);
+  <button id="runFilter">Run Debug</button>
 
-    for (const card of cards) {
-      if (!Array.isArray(card.checklists)) {
-        console.log('No checklists:', card.name);
-        continue;
-      }
+  <ul id="results"></ul>
 
-      for (const checklist of card.checklists) {
-        console.log('Checklist:', checklist);
+  <script>
+    const t = window.TrelloPowerUp.iframe();
+
+    async function filterChecklistItems() {
+      const resultsEl = document.getElementById('results');
+      resultsEl.innerHTML = '<li>Running debug...</li>';
+
+      try {
+        const cards = await t.cards('id', 'name', 'checklists');
+
+        console.log('CARDS:', cards);
+
+        for (const card of cards) {
+          if (!Array.isArray(card.checklists)) {
+            console.log('No checklists:', card.name);
+            continue;
+          }
+
+          for (const checklist of card.checklists) {
+            console.log('Checklist:', checklist);
+          }
+        }
+
+        resultsEl.innerHTML +=
+          '<li>Debug complete. Check console.</li>';
+
+      } catch (err) {
+        console.error('DEBUG ERROR:', err);
+        resultsEl.innerHTML +=
+          `<li>${err.message}</li>`;
       }
     }
 
-    resultsEl.innerHTML += '<li>Debug complete. Check console.</li>';
-
-  } catch (err) {
-    console.error('DEBUG ERROR:', err);
-    resultsEl.innerHTML += `<li>${err.message}</li>`;
-  }
-}
+    document
+      .getElementById('runFilter')
+      .addEventListener('click', filterChecklistItems);
+  </script>
+</body>
+</html>
