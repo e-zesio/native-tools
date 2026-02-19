@@ -4,6 +4,23 @@
   <meta charset="utf-8" />
   <title>Checklist Assignee Filter Power-Up</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script>
+window.TrelloPowerUp.initialize({
+  'board-buttons': function (t, options) {
+    return [{
+      text: 'Checklist Filter',
+      callback: function (t) {
+        return t.popup({
+          title: 'Checklist Filter',
+          url: './index.html',
+          height: 500
+        });
+      }
+    }];
+  }
+});
+</script>
+
   <style>
     body {
       font-family: Arial, sans-serif;
