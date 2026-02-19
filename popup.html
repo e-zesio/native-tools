@@ -94,82 +94,91 @@
   const openOnly = document.getElementById('openOnly').checked;
   const resultsEl = document.getElementById('results');
 
+  const log = (msg, obj = null) => {
+    console.log('[ChecklistFilter]', msg, obj || '');
+    const li = document.createElement('li');
+    li.textContent = obj
+      ? `${msg}: ${JSON.stringify(obj).slice(0, 200)}`
+      : msg;
+    resultsEl.appendChild(li);
+  };
+
+  resultsEl.innerHTML = '';
+
   if (!memberId) {
-    resultsEl.innerHTML = '<li>Select a member first.</li>';
+    log('No member selected');
     return;
   }
 
-  resultsEl.innerHTML = '<li>Filtering cards...</li>';
-
   try {
-    const board = await t.board('id', 'labels');
-    const cards = await t.cards('id', 'name', 'checklists', 'idLabels');
+    log('Fetching cards…');
 
-    // Find or create filter label
-    let filterLabel = board.labels.find(
-      l => l.name === 'Checklist Filter'
-    );
+    const cards = await t.cards('id', 'name', 'checklists');
 
-    if (!filterLabel) {
-      filterLabel = await t.post(
-        `/labels`,
-        {
-          name: 'Checklist Filter',
-          color: 'yellow',
-          idBoard: board.id
+    log(`Loaded ${cards.length} cards`);
+
+    const matchingCards = [];
+
+    for (const card of cards) {
+      if (!card.checklists || !Array.isArray(card.checklists)) {
+        log(`Card "${card.name}" has no checklists`);
+        continue;
+      }
+
+      let cardMatches = false;
+
+      for (const checklist of card.checklists) {
+        if (!checklist.id) {
+          log('Checklist missing id', checklist);
+          continue;
         }
-      );
-    }
 
-    const matchingCardIds = new Set();
+        log(`Fetching checklist ${checklist.id}`);
 
-    cards.forEach(card => {
-      let match = false;
+        // IMPORTANT: fetch full checklist explicitly
+        const fullChecklist = await t.get(
+          `/checklists/${checklist.id}`
+        );
 
-      (card.checklists || []).forEach(checklist => {
-        const items = checklist.checkItems || [];
+        if (
+          !fullChecklist ||
+          !Array.isArray(fullChecklist.checkItems)
+        ) {
+          log('Checklist missing items', fullChecklist);
+          continue;
+        }
 
-        items.forEach(item => {
-          const assignedMatch = item.idMember === memberId;
+        for (const item of fullChecklist.checkItems) {
+          const assignedMatch =
+            item.idMember === memberId;
+
           const statusMatch =
             !openOnly || item.state === 'incomplete';
 
           if (assignedMatch && statusMatch) {
-            match = true;
+            log(
+              `Match found in "${card.name}" → ${item.name}`
+            );
+            cardMatches = true;
           }
-        });
-      });
-
-      if (match) matchingCardIds.add(card.id);
-    });
-
-    // Apply/remove label
-    for (const card of cards) {
-      const hasLabel = card.idLabels.includes(filterLabel.id);
-      const shouldHave = matchingCardIds.has(card.id);
-
-      if (shouldHave && !hasLabel) {
-        await t.post(`/cards/${card.id}/idLabels`, {
-          value: filterLabel.id
-        });
+        }
       }
 
-      if (!shouldHave && hasLabel) {
-        await t.delete(
-          `/cards/${card.id}/idLabels/${filterLabel.id}`
-        );
+      if (cardMatches) {
+        matchingCards.push(card.name);
       }
     }
 
-    resultsEl.innerHTML =
-      '<li>Done! Press F and filter by label "Checklist Filter".</li>';
-
+    log(
+      `Done. Matching cards: ${matchingCards.length}`,
+      matchingCards
+    );
   } catch (err) {
-    console.error('Error filtering items:', err);
-    resultsEl.innerHTML =
-      '<li>Error filtering cards.</li>';
+    console.error('FILTER ERROR:', err);
+    log(`ERROR: ${err.message}`);
   }
 }
+
 
 
     document
